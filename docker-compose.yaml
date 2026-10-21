@@ -1,0 +1,61 @@
+name: recipevaultapp
+
+services:
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      VITE_API_URL: http://backend:3000
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm start
+    environment:
+      PORT: 3000
+      MONGO_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-secret123}@mongo:27017/RecipeVault?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - app-network
+      - database-network
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-secret123}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --username \"$${MONGO_INITDB_ROOT_USERNAME}\" --password \"$${MONGO_INITDB_ROOT_PASSWORD}\" --authenticationDatabase admin --eval \"db.adminCommand({ ping: 1 }).ok\"",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+    networks:
+      - database-network
+
+volumes:
+  mongo-data:
+
+networks:
+  app-network:
+  database-network:
+    internal: true
